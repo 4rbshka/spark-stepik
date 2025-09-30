@@ -1,6 +1,5 @@
-import org.apache.spark.sql.SparkSession
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
 
 object Playground extends App {
@@ -12,40 +11,29 @@ object Playground extends App {
     .master("local")
     .getOrCreate()
 
-  val sc = spark.sparkContext
+  val restaurantexSchema = StructType(Seq(
+    StructField("average_cost_for_two", LongType),
+    StructField("cuisines", StringType),
+    StructField("deeplink", StringType),
+    StructField("has_online_delivery", IntegerType),
+    StructField("is_delivering_now", IntegerType),
+    StructField("menu_url", StringType),
+    StructField("name", StringType),
+    StructField("user_rating",
+      StructType(Seq(
+        StructField("aggregate_rating", StringType),
+        StructField("rating_color", StringType),
+        StructField("rating_text", StringType),
+        StructField("votes", StringType)
+      )))
+  ))
 
-  val data = Seq(
-    Row(
-      "s9FH4rDMvds",
-      "2020-08-11T22:21:49Z",
-      "UCGfBwrCoi9ZJjKiUK8MmJNw",
-      "2020-08-12T00:00:00Z"),
-    Row(
-      "kZxn-0uoqV8",
-      "2020-08-11T14:00:21Z",
-      "UCGFNp4Pialo9wjT9Bo8wECA",
-      "2020-08-12T00:00:00Z"),
-    Row(
-      "QHpU9xLX3nU",
-      "2020-08-10T16:32:12Z",
-      "UCAuvouPCYSOufWtv8qbe6wA",
-      "2020-08-12T00:00:00Z")
-  )
+  val restaurantexDF = spark.read
+    .format("json")
+    .schema(restaurantexSchema)
+    .load("src/main/resources/restaurant_ex.json")
 
-  val schema = Array(
-    StructField("videoId", StringType, false),
-    StructField("publishedAt", StringType, false),
-    StructField("channelId", StringType, false),
-    StructField("trendingDate", StringType, false)
-  )
+  val selectedColumns = restaurantexDF.select("has_online_delivery", "is_delivering_now")
 
-
-  val df = spark.createDataFrame(
-    sc.parallelize(data),
-    StructType(schema)
-  )
-
-  df.show()
-  df.printSchema()
-
+  selectedColumns.printSchema()
 }
