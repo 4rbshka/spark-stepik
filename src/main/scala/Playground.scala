@@ -1,39 +1,47 @@
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.types._
 
-object Playground extends App {
+object Playground extends App with Context {
   Logger.getLogger("org").setLevel(Level.ERROR)
   Logger.getLogger("akka").setLevel(Level.ERROR)
 
-  val spark = SparkSession.builder()
-    .appName("Playground")
-    .master("local")
-    .getOrCreate()
+  override val appName: String = "Playground"
 
-  val restaurantexSchema = StructType(Seq(
-    StructField("average_cost_for_two", LongType),
-    StructField("cuisines", StringType),
-    StructField("deeplink", StringType),
-    StructField("has_online_delivery", IntegerType),
-    StructField("is_delivering_now", IntegerType),
-    StructField("menu_url", StringType),
-    StructField("name", StringType),
-    StructField("user_rating",
-      StructType(Seq(
-        StructField("aggregate_rating", StringType),
-        StructField("rating_color", StringType),
-        StructField("rating_text", StringType),
-        StructField("votes", StringType)
-      )))
+  val moviesSchema = StructType(Seq(
+    StructField("index", IntegerType),
+    StructField("show_id", StringType),
+    StructField("type", StringType),
+    StructField("title", StringType),
+    StructField("director", StringType),
+    StructField("cast", StringType),
+    StructField("country", StringType),
+    StructField("date_added", StringType),
+    StructField("release_year", IntegerType),
+    StructField("rating", StringType),
+    StructField("duration", StringType),
+    StructField("listed_in", StringType),
+    StructField("description", StringType),
+    StructField("year_added", IntegerType),
+    StructField("month_added", FloatType),
+    StructField("season_count", IntegerType)
   ))
 
-  val restaurantexDF = spark.read
-    .format("json")
-    .schema(restaurantexSchema)
-    .load("src/main/resources/restaurant_ex.json")
+  val moviesDF = spark.read
+    .format("csv")
+    .schema(moviesSchema)
+    .option("header", "true")
+    .option("mode", "failFast")
+    .option("nullValue", "n/a")
+    .option("escape", "\"")
+    .option("quote", "\"")
+    .option("multiLine", "true")
+    .load("src/main/resources/movies_on_netflix.csv")
 
-  val selectedColumns = restaurantexDF.select("has_online_delivery", "is_delivering_now")
+  moviesDF.printSchema()
 
-  selectedColumns.printSchema()
+  moviesDF.write
+    .mode(SaveMode.Overwrite)
+    .format("parquet")
+    .save("src/main/resources/data/movies_on_netflix.parquet")
 }
