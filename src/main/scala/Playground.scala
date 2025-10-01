@@ -42,6 +42,5 @@ object Playground extends App with Context {
 
   moviesDF.write
     .mode(SaveMode.Overwrite)
-    .format("parquet")
     .save("src/main/resources/data/movies_on_netflix.parquet")
 }
