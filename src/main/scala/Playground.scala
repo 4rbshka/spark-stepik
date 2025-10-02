@@ -1,4 +1,5 @@
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.sql.functions._
 
 object Playground extends App with Context {
   Logger.getLogger("org").setLevel(Level.ERROR)
@@ -11,9 +12,13 @@ object Playground extends App with Context {
     .option("inferSchema", "true")
     .option("header", "true")
     .load("src/main/resources/bike_sharing.csv")
-    .select("Hour",
-      "TEMPERATURE",
-      "HUMIDITY", "WIND_SPEED")
 
-  bikeSharingDF.show(3)
+  val res = bikeSharingDF
+    .withColumn(
+      "is_workday",
+      when(col("HOLIDAY") === "Holiday" && col("FUNCTIONING_DAY") === "No", 0)
+    .otherwise(1)
+    )
+    .dropDuplicates("HOLIDAY", "FUNCTIONING_DAY", "is_workday")
+    .show()
 }
