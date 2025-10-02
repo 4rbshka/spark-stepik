@@ -7,17 +7,33 @@ object Playground extends App with Context {
 
   override val appName: String = "Playground"
 
-  val bikeSharingDF = spark.read
-    .format("csv")
+  val codefixesDF = spark.read
     .option("inferSchema", "true")
     .option("header", "true")
-    .load("src/main/resources/bike_sharing.csv")
+    .csv("src/main/resources/code_fixes.csv")
 
-  val res = bikeSharingDF
-    .groupBy("Date")
-    .agg(
-      min("TEMPERATURE").as("min_temp"),
-      max("TEMPERATURE").as("max_temp")
+  val resultDF = codefixesDF
+    .select(
+      when(col("syntax corrections") === 1, "syntax corrections")
+        .when(col("improved readability") === 1, "improved readability")
+        .when(col("updated function definition") === 1, "updated function definition")
+        .when(col("fixed bug") === 1, "fixed bug")
+        .otherwise("no_fix")
+        .as("fix_description"),
+      col("code_lines")
     )
-    .show(20)
+    .filter(col("fix_description") =!= "no_fix")
+    .groupBy("fix_description")
+    .agg(
+      count("*").as("fix_count"),
+      sum("code_lines").as("lines_count")
+    )
+    .withColumn("total_count",
+      struct(
+        sum("fix_count").over().as("total_fixes"),
+        sum("lines_count").over().as("total_lines")
+      )
+    )
+
+  resultDF.show(truncate = false)
 }
