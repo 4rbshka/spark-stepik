@@ -14,11 +14,10 @@ object Playground extends App with Context {
     .load("src/main/resources/bike_sharing.csv")
 
   val res = bikeSharingDF
-    .withColumn(
-      "is_workday",
-      when(col("HOLIDAY") === "Holiday" && col("FUNCTIONING_DAY") === "No", 0)
-    .otherwise(1)
+    .groupBy("Date")
+    .agg(
+      min("TEMPERATURE").as("min_temp"),
+      max("TEMPERATURE").as("max_temp")
     )
-    .dropDuplicates("HOLIDAY", "FUNCTIONING_DAY", "is_workday")
-    .show()
+    .show(20)
 }
