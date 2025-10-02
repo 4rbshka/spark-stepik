@@ -1,4 +1,5 @@
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.functions._
 
 object Playground extends App with Context {
@@ -7,33 +8,25 @@ object Playground extends App with Context {
 
   override val appName: String = "Playground"
 
-  val codefixesDF = spark.read
+  val mallCustomersDF = spark.read
     .option("inferSchema", "true")
     .option("header", "true")
-    .csv("src/main/resources/code_fixes.csv")
+    .csv("src/main/resources/mall_customers.csv")
+    .withColumn("Age", col("Age") + 2)
 
-  val resultDF = codefixesDF
-    .select(
-      when(col("syntax corrections") === 1, "syntax corrections")
-        .when(col("improved readability") === 1, "improved readability")
-        .when(col("updated function definition") === 1, "updated function definition")
-        .when(col("fixed bug") === 1, "fixed bug")
-        .otherwise("no_fix")
-        .as("fix_description"),
-      col("code_lines")
+  val incomeDF = mallCustomersDF
+    .withColumn("gender_code",
+      when(col("Gender") === "Male", 1)
+        .otherwise(0)
     )
-    .filter(col("fix_description") =!= "no_fix")
-    .groupBy("fix_description")
+    .filter("Age BETWEEN 30 AND 35")
+    .groupBy("Gender", "Age", "gender_code")
     .agg(
-      count("*").as("fix_count"),
-      sum("code_lines").as("lines_count")
+      round(avg("Annual Income (k$)"), 1).as("AVG_income")
     )
-    .withColumn("total_count",
-      struct(
-        sum("fix_count").over().as("total_fixes"),
-        sum("lines_count").over().as("total_lines")
-      )
-    )
+    .orderBy("gender_code", "Age")
 
-  resultDF.show(truncate = false)
+  incomeDF.write
+    .mode(SaveMode.Overwrite)
+    .save("resources/data/customers")
 }
