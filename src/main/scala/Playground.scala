@@ -1,32 +1,44 @@
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
 
-object Playground extends App with Context {
+object Playground extends App {
   Logger.getLogger("org").setLevel(Level.ERROR)
   Logger.getLogger("akka").setLevel(Level.ERROR)
 
-  override val appName: String = "Playground"
+  private def createSession(appName: String) = {
+    SparkSession.builder()
+      .appName(appName)
+      .master("local[*]")
+      .getOrCreate()
+  }
 
-  val mallCustomersDF = spark.read
-    .option("inferSchema", "true")
-    .option("header", "true")
-    .csv("src/main/resources/mall_customers.csv")
-    .withColumn("Age", col("Age") + 2)
+  val appName: String = "Playground"
+  lazy val spark = createSession(appName)
 
-  val incomeDF = mallCustomersDF
-    .withColumn("gender_code",
-      when(col("Gender") === "Male", 1)
-        .otherwise(0)
-    )
-    .filter("Age BETWEEN 30 AND 35")
-    .groupBy("Gender", "Age", "gender_code")
-    .agg(
-      round(avg("Annual Income (k$)"), 1).as("AVG_income")
-    )
-    .orderBy("gender_code", "Age")
+  def processSeason(filePath: String, wordCol: String, countCol: String) = {
+    spark.read
+      .option("inferSchema", "true")
+      .csv(filePath)
+      .select(explode(split(lower(col("_c0")), "\\W+")).as(wordCol))
+      .filter(length(col(wordCol)) > 0)
+      .groupBy(col(wordCol))
+      .agg(count(col(wordCol)).as(countCol))
+      .orderBy(desc(countCol))
+      .limit(20)
+      .withColumn("id", monotonically_increasing_id())
+  }
 
-  incomeDF.write
+  val season1DF = processSeason("src/main/resources/subtitles_s1.json", "w_s1", "cnt_s1")
+  val season2DF = processSeason("src/main/resources/subtitles_s2.json", "w_s2", "cnt_s2")
+
+  val wordCountDF = season1DF
+    .join(season2DF, "id")
+    .select("w_s1", "cnt_s1", "id", "w_s2", "cnt_s2")
+
+  wordCountDF.write
     .mode(SaveMode.Overwrite)
-    .save("resources/data/customers")
+    .json("src/main/resources/data/wordcount")
+
+  spark.stop()
 }
