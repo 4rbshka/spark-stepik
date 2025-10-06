@@ -1,44 +1,64 @@
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 
-object Playground extends App {
+object Playground extends App with Context {
   Logger.getLogger("org").setLevel(Level.ERROR)
   Logger.getLogger("akka").setLevel(Level.ERROR)
 
-  private def createSession(appName: String) = {
-    SparkSession.builder()
-      .appName(appName)
-      .master("local[*]")
-      .getOrCreate()
-  }
+  override val appName: String = "Playground"
+  import spark.implicits._
 
-  val appName: String = "Playground"
-  lazy val spark = createSession(appName)
+  case class Shoes(
+                    item_category: String,
+                    item_name: String,
+                    item_after_discount: String,
+                    item_price: String,
+                    percentage_solds: Int,
+                    item_rating: Int,
+                    item_shipping: String,
+                    buyer_gender: String
+                  )
 
-  def processSeason(filePath: String, wordCol: String, countCol: String) = {
+  def readData(filePath: String): DataFrame = {
     spark.read
+      .option("header", "true")
       .option("inferSchema", "true")
       .csv(filePath)
-      .select(explode(split(lower(col("_c0")), "\\W+")).as(wordCol))
-      .filter(length(col(wordCol)) > 0)
-      .groupBy(col(wordCol))
-      .agg(count(col(wordCol)).as(countCol))
-      .orderBy(desc(countCol))
-      .limit(20)
-      .withColumn("id", monotonically_increasing_id())
   }
 
-  val season1DF = processSeason("src/main/resources/subtitles_s1.json", "w_s1", "cnt_s1")
-  val season2DF = processSeason("src/main/resources/subtitles_s2.json", "w_s2", "cnt_s2")
+  def filterRequiredFields(df: DataFrame): DataFrame = {
+    df.filter(col("item_name").isNotNull && col("item_category").isNotNull)
+  }
 
-  val wordCountDF = season1DF
-    .join(season2DF, "id")
-    .select("w_s1", "cnt_s1", "id", "w_s2", "cnt_s2")
+  def fillItemAfterDiscount(df: DataFrame): DataFrame = {
+    df.withColumn("item_after_discount",
+      when(col("item_after_discount").isNull, col("item_price"))
+        .otherwise(col("item_after_discount"))
+    )
+  }
 
-  wordCountDF.write
-    .mode(SaveMode.Overwrite)
-    .json("src/main/resources/data/wordcount")
+  def fillNumericFields(df: DataFrame): DataFrame = {
+    df.na.fill(Map(
+      "item_rating" -> 0,
+      "percentage_solds" -> -1
+    ))
+  }
 
-  spark.stop()
+  def fillStringFields(df: DataFrame): DataFrame = {
+    df.na.fill(Map(
+      "buyer_gender" -> "unknown",
+      "item_price" -> "n/a",
+      "item_shipping" -> "n/a"
+    ))
+  }
+
+  val athleticShoesDS = readData("src/main/resources/athletic_shoes.csv")
+    .transform(filterRequiredFields)
+    .transform(fillItemAfterDiscount)
+    .transform(fillNumericFields)
+    .transform(fillStringFields)
+    .as[Shoes]
+
+  athleticShoesDS.show()
 }
